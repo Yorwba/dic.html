@@ -1,0 +1,169 @@
+" />
+    <script type="text/javascript">
+      let data = dictionary.content;
+      const MAX_MATCHES = 1000;
+
+      function search(searchString, results) {
+        let matches = findMatches(searchString);
+        let listItems = [];
+        let previousWordIndex = null;
+        for (let match of matches) {
+          let wordIndex = match[0];
+          if (wordIndex == previousWordIndex) {
+            continue;
+          }
+          previousWordIndex = wordIndex;
+          let matchEntry = getDictionaryEntry(wordIndex);
+
+          let listItem = document.createElement("li");
+          let wordItem = document.createElement("b");
+          wordItem.append(matchEntry[0]);
+          listItem.append(wordItem);
+          for (let definitionLine of matchEntry[1].split("\n")) {
+            let definitionPara = document.createElement("p");
+            definitionPara.append(definitionLine);
+            listItem.append(definitionPara);
+          }
+
+          listItems.push(listItem);
+          if (listItems.length >= MAX_MATCHES) {
+            break;
+          }
+        }
+        results.replaceChildren(...listItems);
+        return false;
+      }
+
+      function findMatches(searchString) {
+        searchString = searchString.normalize("NFKD");
+        let low = findLow(searchString);
+        let high = findHigh(searchString);
+        let matches = []
+        for (let i = low; i < high; i++) {
+          matches.push(getSuffixArrayEntry(i));
+        }
+        matches.sort((a, b) => (a[1] - b[1]) || (a[0] - b[0]));
+        return matches;
+      }
+
+      function findLow(searchString) {
+        let low = 0;
+        let high = getSuffixArrayLen();
+        while (low < high) {
+          let mid = Math.floor((high - low)/2) + low
+          if (getSuffix(mid) < searchString) {
+            low = mid + 1;
+          } else {
+            high = mid;
+          }
+        }
+        return low;
+      }
+
+      function findHigh(searchString) {
+        let low = 0;
+        let high = getSuffixArrayLen();
+        while (low < high) {
+          let mid = Math.floor((high - low)/2) + low
+          if (getSuffix(mid).slice(0, searchString.length) <= searchString) {
+            low = mid + 1;
+          } else {
+            high = mid;
+          }
+        }
+        return high;
+      }
+
+      function getSuffix(index) {
+        let wordSuffixIndex = getSuffixArrayEntry(index);
+        let wordIndex = wordSuffixIndex[0];
+        let suffixIndex = wordSuffixIndex[1];
+        return getSearchString(wordIndex).slice(suffixIndex);
+      }
+
+      function getDictionaryLen() {
+        return unpackDouble(0);
+      }
+
+      function getPackedDictionaryLen() {
+        return unpackDouble(2);
+      }
+
+      function getPackedSearchStringsLen() {
+        return unpackDouble(4);
+      }
+
+      function getSuffixArrayLen() {
+        return unpackDouble(6);
+      }
+
+      const HEADER_SIZE = 8;
+
+      function getDictionaryEntry(index) {
+        let dictionaryIndexStart = HEADER_SIZE;
+        let dictionaryStart = HEADER_SIZE + 4 * (getDictionaryLen() + 1);
+        let entryStart = dictionaryStart + unpackDouble(dictionaryIndexStart + 2 * index);
+        let entryEnd = dictionaryStart + unpackDouble(dictionaryIndexStart + 2 * index + 2);
+        let wordLen = unpackSingle(entryStart);
+        let definitionStart = entryStart + 1 + wordLen;
+        let word = data.slice(entryStart + 1, definitionStart);
+        let definition = data.slice(definitionStart, entryEnd);
+        return [word, definition];
+      }
+
+      function getSearchString(index) {
+        let searchStringsIndexStart = HEADER_SIZE + 2 * (getDictionaryLen() + 1);
+        let searchStringsStart = HEADER_SIZE + 4 * (getDictionaryLen() + 1) + getPackedDictionaryLen();
+        let stringStart = searchStringsStart + unpackDouble(searchStringsIndexStart + 2 * index);
+        let stringEnd = searchStringsStart + unpackDouble(searchStringsIndexStart + 2 * (index+1));
+        return data.slice(stringStart, stringEnd);
+      }
+
+      function getSuffixArrayEntry(index) {
+        let suffixArrayStart = HEADER_SIZE + 4 * (getDictionaryLen() + 1) + getPackedDictionaryLen() + getPackedSearchStringsLen();
+        let entryStart = suffixArrayStart + 3 * index;
+        let wordIndex = unpackDouble(entryStart);
+        let suffixIndex = unpackSingle(entryStart + 2);
+        return [wordIndex, suffixIndex];
+      }
+
+      const SINGLE_UTF16_LOWER_LIMIT = 0x20;
+      const SINGLE_UTF16_UPPER_LIMIT = 0xd800;
+      const SINGLE_UTF16_RANGE = SINGLE_UTF16_UPPER_LIMIT - SINGLE_UTF16_LOWER_LIMIT;
+
+      function unpackSingle(index) {
+        return data.charCodeAt(index) - SINGLE_UTF16_LOWER_LIMIT;
+      }
+
+      function unpackDouble(index) {
+        return unpackSingle(index) * SINGLE_UTF16_RANGE + unpackSingle(index+1);
+      }
+    </script>
+    <style type="text/css">
+      body {
+        max-width: 40em;
+        margin: auto;
+        width: max-content;
+        word-break: break-word;
+        margin: auto;
+        width: fit-content;
+      }
+      #results {
+        width: fit-content;
+        margin: auto;
+      }
+      form {
+        margin: auto;
+        width: fit-content;
+      }
+    </style>
+  </head>
+  <body>
+    <form onsubmit="return search(searchbox.value, results)">
+      <input id="searchbox" type="search" oninput="if(searchbox.value) { search(searchbox.value, results) }">
+      <button type="submit">🔍</button>
+    </form>
+    <ul id="results">
+    </ul>
+  </body>
+</html>
